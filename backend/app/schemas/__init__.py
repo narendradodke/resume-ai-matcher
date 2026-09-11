@@ -14,6 +14,12 @@ from backend.app.schemas.resume_schema import (
     ResumeResponse,
     ResumeSummary,
 )
+from backend.app.schemas.analysis_schema import (
+    AnalysisCreate,
+    AnalysisResponse,
+    AnalysisHistoryItem,
+    PaginatedAnalyses,
+)
 
 __all__ = [
     "UserBase",
@@ -28,4 +34,8 @@ __all__ = [
     "ResumeBase",
     "ResumeResponse",
     "ResumeSummary",
+    "AnalysisCreate",
+    "AnalysisResponse",
+    "AnalysisHistoryItem",
+    "PaginatedAnalyses",
 ]
