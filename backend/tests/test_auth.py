@@ -33,7 +33,6 @@ def test_signup_duplicate_email(client):
 
 
 def test_signup_validation_failure(client):
-    # Missing required field and short password
     response = client.post(
         "/api/v1/auth/signup",
         json={"email": "notanemail", "password": "123"},
@@ -41,3 +40,47 @@ def test_signup_validation_failure(client):
     assert response.status_code == 422
     data = response.json()
     assert data["success"] is False
+
+
+def test_login_success(client):
+    # Create user first
+    signup_res = client.post(
+        "/api/v1/auth/signup",
+        json={
+            "name": "Alice Smith",
+            "email": "alice@example.com",
+            "password": "mypassword123",
+        },
+    )
+    assert signup_res.status_code == 201
+
+    # Login
+    login_res = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "alice@example.com",
+            "password": "mypassword123",
+        },
+    )
+    assert login_res.status_code == 200
+    data = login_res.json()
+    assert data["success"] is True
+    assert "access_token" in data["data"]
+    assert "refresh_token" in data["data"]
+    assert data["data"]["token_type"] == "bearer"
+    assert data["data"]["user"]["email"] == "alice@example.com"
+
+
+def test_login_invalid_credentials(client):
+    # Attempt login with unregistered user
+    res = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "nonexistent@example.com",
+            "password": "wrongpassword",
+        },
+    )
+    assert res.status_code == 401
+    data = res.json()
+    assert data["success"] is False
+    assert "Invalid email or password" in data["error"]

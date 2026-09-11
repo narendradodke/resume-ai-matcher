@@ -3,8 +3,19 @@ from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
 from backend.app.models.user import User
-from backend.app.schemas.user_schema import UserCreate, UserResponse, ResponseEnvelope
-from backend.app.core.security import get_password_hash
+from backend.app.schemas.user_schema import (
+    UserCreate,
+    UserLogin,
+    UserResponse,
+    TokenResponse,
+    ResponseEnvelope,
+)
+from backend.app.core.security import (
+    get_password_hash,
+    verify_password,
+    create_access_token,
+    create_refresh_token,
+)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -35,5 +46,34 @@ def signup(user_in: UserCreate, db: Session = Depends(get_db)):
     return {
         "success": True,
         "data": UserResponse.model_validate(user),
+        "error": None,
+    }
+
+
+@router.post("/login", response_model=ResponseEnvelope[TokenResponse])
+def login(login_in: UserLogin, db: Session = Depends(get_db)):
+    """
+    Authenticate user and issue JWT access and refresh tokens.
+    """
+    user = db.query(User).filter(User.email == login_in.email.lower()).first()
+    if not user or not verify_password(login_in.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password.",
+        )
+
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id)
+
+    token_data = TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
+        user=UserResponse.model_validate(user),
+    )
+
+    return {
+        "success": True,
+        "data": token_data,
         "error": None,
     }
