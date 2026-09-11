@@ -1,4 +1,4 @@
-﻿version: "3.8"
+version: "3.8"
 
 services:
   postgres:
@@ -33,6 +33,64 @@ services:
       timeout: 5s
       retries: 5
 
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: resume_matcher_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/resume_matcher
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=production_jwt_secret_key_change_me_in_env_file_12345
+      - JWT_ALGORITHM=HS256
+      - AI_PROVIDER=anthropic
+      - AI_PROVIDER_API_KEY=${AI_PROVIDER_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_uploads:/app/uploads
+
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: resume_matcher_celery
+    restart: always
+    command: ["celery", "-A", "app.core.celery_worker.celery_app", "worker", "--loglevel=info"]
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/resume_matcher
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=production_jwt_secret_key_change_me_in_env_file_12345
+      - AI_PROVIDER=anthropic
+      - AI_PROVIDER_API_KEY=${AI_PROVIDER_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: resume_matcher_frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
   redis_data:
+  backend_uploads:
