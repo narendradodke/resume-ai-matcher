@@ -1,4 +1,4 @@
-﻿import io
+import io
 import pytest
 
 VALID_PDF_BYTES = (
@@ -121,3 +121,27 @@ def test_resume_user_isolation(client):
     # User B tries to delete User A's resume -> 404
     del_res = client.delete(f"/api/v1/resume/{resume_a_id}", headers=headers_b)
     assert del_res.status_code == 404
+
+
+def test_upload_invalid_magic_bytes(client):
+    headers = get_auth_header(client, email="fake_magic@example.com")
+    # File named .pdf but containing plain text without %PDF- magic bytes
+    files = {
+        "file": ("fake.pdf", io.BytesIO(b"This is not a real PDF file."), "application/pdf")
+    }
+    response = client.post("/api/v1/resume/upload", headers=headers, files=files)
+    assert response.status_code == 400
+    assert "Invalid PDF content" in response.json()["error"]
+
+
+def test_upload_path_traversal_sanitization(client):
+    headers = get_auth_header(client, email="traversal@example.com")
+    # File with directory traversal characters in filename
+    files = {
+        "file": ("../../etc/passwd.pdf", io.BytesIO(VALID_PDF_BYTES), "application/pdf")
+    }
+    response = client.post("/api/v1/resume/upload", headers=headers, files=files)
+    assert response.status_code == 201
+    # Check that the file was safely saved and didn't escape to ../../
+    saved_url = response.json()["data"]["file_url"]
+    assert ".." not in saved_url

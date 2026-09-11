@@ -1,4 +1,4 @@
-﻿import shutil
+import shutil
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -10,8 +10,10 @@ from backend.app.api.deps import get_current_user
 from backend.app.schemas.user_schema import (
     UserResponse,
     UserUpdate,
+    PasswordChange,
     ResponseEnvelope,
 )
+from backend.app.core.security import verify_password, get_password_hash
 
 router = APIRouter(prefix="/user", tags=["User"])
 
@@ -56,6 +58,32 @@ def update_user_profile(
     return {
         "success": True,
         "data": UserResponse.model_validate(current_user),
+        "error": None,
+    }
+
+
+@router.put("/password", response_model=ResponseEnvelope[dict])
+def change_user_password(
+    password_in: PasswordChange,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Change user password after verifying current password.
+    """
+    if not current_user.password_hash or not verify_password(password_in.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password verification failed.",
+        )
+
+    current_user.password_hash = get_password_hash(password_in.new_password)
+    db.add(current_user)
+    db.commit()
+
+    return {
+        "success": True,
+        "data": {"message": "Password changed successfully."},
         "error": None,
     }
 

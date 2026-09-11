@@ -1,4 +1,4 @@
-﻿def test_signup_success(client):
+def test_signup_success(client):
     response = client.post(
         "/api/v1/auth/signup",
         json={
@@ -150,3 +150,31 @@ def test_get_me_unauthorized(client):
         headers={"Authorization": "Bearer bad-token"},
     )
     assert res_bad.status_code == 401
+
+
+def test_google_auth_flow(client):
+    # 1. Sign up/in via Google OAuth
+    res = client.post(
+        "/api/v1/auth/google",
+        json={"email": "googleuser@example.com", "name": "Google Tester", "id_token": "mock_google_id_123"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["success"] is True
+    assert "access_token" in data["data"]
+    assert data["data"]["user"]["email"] == "googleuser@example.com"
+    assert data["data"]["user"]["is_verified"] is True
+
+    # 2. Re-login with existing email via Google
+    res_relogin = client.post(
+        "/api/v1/auth/google",
+        json={"email": "googleuser@example.com", "name": "Google Tester", "id_token": "mock_google_id_123"},
+    )
+    assert res_relogin.status_code == 200
+    assert "access_token" in res_relogin.json()["data"]
+
+
+def test_google_auth_missing_email(client):
+    res = client.post("/api/v1/auth/google", json={"name": "No Email User"})
+    assert res.status_code == 400
+    assert res.json()["success"] is False

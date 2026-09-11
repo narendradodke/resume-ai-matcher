@@ -1,4 +1,4 @@
-﻿import os
+import os
 import uuid
 from typing import List
 from pathlib import Path
@@ -48,6 +48,12 @@ async def upload_resume(
             detail="Uploaded file is empty.",
         )
 
+    if not content.startswith(b"%PDF-"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid PDF content. File header does not match PDF format signature.",
+        )
+
     try:
         extracted_text = extract_text_from_pdf(content)
     except ValueError as ve:
@@ -61,10 +67,25 @@ async def upload_resume(
             detail=f"Failed to process PDF resume: {str(e)}",
         )
 
-    user_upload_dir = Path(settings.UPLOAD_DIR) / str(current_user.id)
+    # Sanitize filename and prevent directory traversal
+    clean_base_name = Path(filename).name
+    # Strip any directory separators or dangerous characters
+    safe_name = "".join(c for c in clean_base_name if c.isalnum() or c in "._- ")
+    if not safe_name.lower().endswith(".pdf"):
+        safe_name = "resume.pdf"
+
+    user_upload_dir = (Path(settings.UPLOAD_DIR).resolve() / str(current_user.id)).resolve()
     user_upload_dir.mkdir(parents=True, exist_ok=True)
-    saved_filename = f"{uuid.uuid4().hex}_{Path(filename).name}"
-    file_path = user_upload_dir / saved_filename
+    saved_filename = f"{uuid.uuid4().hex}_{safe_name}"
+    file_path = (user_upload_dir / saved_filename).resolve()
+
+    # Verify file_path is strictly inside user_upload_dir
+    if not str(file_path).startswith(str(user_upload_dir)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file path detected.",
+        )
+
     with open(file_path, "wb") as f:
         f.write(content)
 

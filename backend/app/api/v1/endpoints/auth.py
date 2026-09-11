@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from jose import JWTError
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -13,6 +13,7 @@ from backend.app.schemas.user_schema import (
     TokenRefresh,
     TokenResponse,
     TokenRefreshResponse,
+    GoogleAuthRequest,
     ResponseEnvelope,
 )
 from backend.app.core.security import (
@@ -137,5 +138,62 @@ def get_me(current_user: User = Depends(get_current_user)):
     return {
         "success": True,
         "data": UserResponse.model_validate(current_user),
+        "error": None,
+    }
+
+
+@router.post("/google", response_model=ResponseEnvelope[TokenResponse])
+def google_auth(auth_in: GoogleAuthRequest, db: Session = Depends(get_db)):
+    """
+    Sign in or register a user with Google OAuth credentials.
+    """
+    target_email = auth_in.email
+    target_name = auth_in.name or "Google User"
+    oauth_id = auth_in.id_token or "google_default_id"
+
+    if not target_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google account email is required for OAuth authentication.",
+        )
+
+    user = db.query(User).filter(User.email == target_email.lower()).first()
+    if not user:
+        # Create user with Google OAuth
+        user = User(
+            name=target_name,
+            email=target_email.lower(),
+            password_hash=None,
+            oauth_provider="google",
+            oauth_id=oauth_id,
+            plan="free",
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        # Update existing user OAuth info if not previously linked
+        if not user.oauth_provider:
+            user.oauth_provider = "google"
+            user.oauth_id = oauth_id
+            user.is_verified = True
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id)
+
+    token_data = TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
+        user=UserResponse.model_validate(user),
+    )
+
+    return {
+        "success": True,
+        "data": token_data,
         "error": None,
     }

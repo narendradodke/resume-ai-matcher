@@ -1,4 +1,4 @@
-﻿import math
+import math
 from typing import Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -57,17 +57,17 @@ def run_analysis(
     db.commit()
     db.refresh(analysis)
 
-    # 3. Trigger background worker task
+    # 3. Trigger background worker task asynchronously
     try:
         process_analysis_task.delay(str(analysis.id))
-    except Exception:
-        try:
-            process_analysis_task(str(analysis.id))
-            db.refresh(analysis)
-        except Exception:
-            pass
+    except Exception as e:
+        analysis.status = "failed"
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Background task queue unavailable. Please try again in a few moments.",
+        )
 
-    db.refresh(analysis)
     return {
         "success": True,
         "data": AnalysisResponse.model_validate(analysis),

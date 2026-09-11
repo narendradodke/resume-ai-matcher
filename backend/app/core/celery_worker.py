@@ -1,6 +1,9 @@
-﻿from uuid import UUID
+import logging
+from uuid import UUID
 from celery import Celery
 from backend.app.config import settings
+
+logger = logging.getLogger(__name__)
 
 celery_app = Celery(
     "resume_matcher_worker",
@@ -23,11 +26,19 @@ celery_app.conf.update(
 )
 
 
-@celery_app.task(name="process_analysis_task")
-def process_analysis_task(analysis_id: str):
+@celery_app.task(
+    name="process_analysis_task",
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=60,
+    retry_jitter=True,
+    max_retries=3,
+)
+def process_analysis_task(self, analysis_id: str):
     """
     Background worker task to execute AI resume-job matching
-    and persist results to PostgreSQL.
+    and persist results to PostgreSQL with exponential backoff retries.
     """
     from backend.app.database import SessionLocal
     from backend.app.models.analysis import Analysis
@@ -38,6 +49,7 @@ def process_analysis_task(analysis_id: str):
     try:
         analysis = db.query(Analysis).filter(Analysis.id == UUID(analysis_id)).first()
         if not analysis:
+            logger.warning("Analysis record not found for id=%s", analysis_id)
             return
 
         analysis.status = "processing"
@@ -45,6 +57,7 @@ def process_analysis_task(analysis_id: str):
 
         resume = db.query(Resume).filter(Resume.id == analysis.resume_id).first()
         if not resume:
+            logger.error("Resume record %s not found for analysis %s", analysis.resume_id, analysis_id)
             analysis.status = "failed"
             db.commit()
             return
@@ -56,14 +69,19 @@ def process_analysis_task(analysis_id: str):
         analysis.suggestions = ai_result.get("suggestions", "")
         analysis.status = "completed"
         db.commit()
+        logger.info("Successfully completed analysis id=%s with score=%s", analysis_id, analysis.match_score)
     except Exception as e:
         db.rollback()
-        try:
-            analysis = db.query(Analysis).filter(Analysis.id == UUID(analysis_id)).first()
-            if analysis:
-                analysis.status = "failed"
-                db.commit()
-        except Exception:
-            pass
+        logger.exception("Error executing analysis id=%s (attempt %s/%s): %s", analysis_id, self.request.retries, self.max_retries, e)
+        # If this is the final retry attempt, mark status as failed in DB
+        if self.request.retries >= self.max_retries:
+            try:
+                analysis = db.query(Analysis).filter(Analysis.id == UUID(analysis_id)).first()
+                if analysis:
+                    analysis.status = "failed"
+                    db.commit()
+            except Exception as dbe:
+                logger.error("Failed to update analysis status to failed: %s", dbe)
+        raise e
     finally:
         db.close()
