@@ -9,12 +9,12 @@ import {
   History,
   ArrowRight,
   Sparkles,
-  CheckCircle2,
   Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 
@@ -93,7 +93,11 @@ export default function DashboardPage() {
             <History className="h-4 w-4 text-violet-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{totalScans}</div>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold text-white">{totalScans}</div>
+            )}
             <p className="text-xs text-slate-500 mt-1">Total job descriptions evaluated</p>
           </CardContent>
         </Card>
@@ -104,9 +108,13 @@ export default function DashboardPage() {
             <TrendingUp className="h-4 w-4 text-emerald-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
-              {avgScore > 0 ? `${avgScore}%` : "—"}
-            </div>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold text-white">
+                {avgScore > 0 ? `${avgScore}%` : "—"}
+              </div>
+            )}
             <p className="text-xs text-slate-500 mt-1">Across your recent evaluations</p>
           </CardContent>
         </Card>
@@ -137,8 +145,19 @@ export default function DashboardPage() {
         </div>
 
         {loading ? (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-8 text-center text-slate-400">
-            Loading recent analyses...
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between p-4 rounded-xl border border-slate-800 bg-slate-900/40"
+              >
+                <div className="space-y-2 flex-1 mr-4">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/4" />
+                </div>
+                <Skeleton className="h-8 w-24 rounded-lg" />
+              </div>
+            ))}
           </div>
         ) : recentAnalyses.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 p-12 text-center">

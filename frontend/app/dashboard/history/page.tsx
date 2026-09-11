@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 
 interface AnalysisItem {
@@ -122,8 +123,19 @@ export default function HistoryPage() {
 
       {/* Main List */}
       {loading ? (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-12 text-center text-slate-400">
-          Loading past analyses...
+        <div className="space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between p-5 rounded-xl border border-slate-800 bg-slate-900/40"
+            >
+              <div className="space-y-2 flex-1 mr-4">
+                <Skeleton className="h-4 w-4/5" />
+                <Skeleton className="h-3 w-1/3" />
+              </div>
+              <Skeleton className="h-9 w-28 rounded-lg" />
+            </div>
+          ))}
         </div>
       ) : analyses.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 p-16 text-center">
