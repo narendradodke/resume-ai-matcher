@@ -4,8 +4,11 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from backend.app.config import settings
+from backend.app.api.v1.router import api_router
+
 app = FastAPI(
-    title="AI Resume Matcher API",
+    title=settings.PROJECT_NAME,
     version="1.0.0",
     description="Production-grade AI Resume & Job Description matching SaaS API",
     docs_url="/docs",
@@ -15,7 +18,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -44,7 +47,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 async def general_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"success": False, "data": None, "error": "An internal server error occurred"},
+        content={"success": False, "data": None, "error": str(exc) if settings.DEBUG else "An internal server error occurred"},
     )
 
 
@@ -70,3 +73,7 @@ async def root():
         },
         "error": None,
     }
+
+
+# Mount API V1 router
+app.include_router(api_router, prefix=settings.API_V1_STR)
