@@ -84,7 +84,6 @@ def test_login_invalid_credentials(client):
 
 
 def test_refresh_token_success(client):
-    # Signup & login
     client.post(
         "/api/v1/auth/signup",
         json={"name": "Refresh User", "email": "ref@example.com", "password": "password123"},
@@ -95,7 +94,6 @@ def test_refresh_token_success(client):
     )
     refresh_token = login_res.json()["data"]["refresh_token"]
 
-    # Call refresh
     refresh_res = client.post(
         "/api/v1/auth/refresh",
         json={"refresh_token": refresh_token},
@@ -115,3 +113,40 @@ def test_refresh_token_invalid(client):
     assert res.status_code == 401
     data = res.json()
     assert data["success"] is False
+
+
+def test_get_me_success(client):
+    # Signup & Login
+    client.post(
+        "/api/v1/auth/signup",
+        json={"name": "Auth Me User", "email": "me@example.com", "password": "password123"},
+    )
+    login_res = client.post(
+        "/api/v1/auth/login",
+        json={"email": "me@example.com", "password": "password123"},
+    )
+    access_token = login_res.json()["data"]["access_token"]
+
+    # Call GET /me with Bearer token
+    me_res = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert me_res.status_code == 200
+    data = me_res.json()
+    assert data["success"] is True
+    assert data["data"]["email"] == "me@example.com"
+    assert data["data"]["name"] == "Auth Me User"
+
+
+def test_get_me_unauthorized(client):
+    # No auth header
+    res = client.get("/api/v1/auth/me")
+    assert res.status_code == 401
+
+    # Invalid token
+    res_bad = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": "Bearer bad-token"},
+    )
+    assert res_bad.status_code == 401
