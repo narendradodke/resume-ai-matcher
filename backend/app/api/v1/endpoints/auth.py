@@ -5,6 +5,7 @@ from uuid import UUID
 
 from backend.app.database import get_db
 from backend.app.models.user import User
+from backend.app.api.deps import get_current_user
 from backend.app.schemas.user_schema import (
     UserCreate,
     UserLogin,
@@ -124,5 +125,17 @@ def refresh_token(token_in: TokenRefresh, db: Session = Depends(get_db)):
             access_token=new_access_token,
             token_type="bearer",
         ),
+        "error": None,
+    }
+
+
+@router.get("/me", response_model=ResponseEnvelope[UserResponse])
+def get_me(current_user: User = Depends(get_current_user)):
+    """
+    Retrieve authenticated user's profile info.
+    """
+    return {
+        "success": True,
+        "data": UserResponse.model_validate(current_user),
         "error": None,
     }
