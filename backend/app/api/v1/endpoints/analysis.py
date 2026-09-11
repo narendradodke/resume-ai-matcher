@@ -9,6 +9,7 @@ from backend.app.models.user import User
 from backend.app.models.resume import Resume
 from backend.app.models.analysis import Analysis
 from backend.app.api.deps import get_current_user
+from backend.app.core.rate_limiter import check_rate_limit
 from backend.app.schemas.user_schema import ResponseEnvelope
 from backend.app.schemas.analysis_schema import (
     AnalysisCreate,
@@ -28,8 +29,12 @@ def run_analysis(
 ):
     """
     Trigger AI analysis between an uploaded resume and a job description.
-    Runs asynchronously via Celery background task.
+    Runs asynchronously via Celery background task with rate limiting.
     """
+    # 0. Enforce rate limiting
+    check_rate_limit(str(current_user.id))
+
+    # 1. Verify resume belongs to user
     resume = (
         db.query(Resume)
         .filter(Resume.id == analysis_in.resume_id, Resume.user_id == current_user.id)
@@ -41,6 +46,7 @@ def run_analysis(
             detail="Resume not found or does not belong to the authenticated user.",
         )
 
+    # 2. Create pending analysis record
     analysis = Analysis(
         user_id=current_user.id,
         resume_id=resume.id,
@@ -51,6 +57,7 @@ def run_analysis(
     db.commit()
     db.refresh(analysis)
 
+    # 3. Trigger background worker task
     try:
         process_analysis_task.delay(str(analysis.id))
     except Exception:
