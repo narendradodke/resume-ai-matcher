@@ -1,8 +1,10 @@
 ﻿import os
 import uuid
+from typing import List
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
+from uuid import UUID
 
 from backend.app.config import settings
 from backend.app.database import get_db
@@ -79,6 +81,54 @@ async def upload_resume(
     db.add(resume)
     db.commit()
     db.refresh(resume)
+
+    return {
+        "success": True,
+        "data": ResumeResponse.model_validate(resume),
+        "error": None,
+    }
+
+
+@router.get("/list", response_model=ResponseEnvelope[List[ResumeResponse]])
+def list_resumes(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    List all resumes uploaded by the current authenticated user.
+    """
+    resumes = (
+        db.query(Resume)
+        .filter(Resume.user_id == current_user.id)
+        .order_by(Resume.uploaded_at.desc())
+        .all()
+    )
+    return {
+        "success": True,
+        "data": [ResumeResponse.model_validate(r) for r in resumes],
+        "error": None,
+    }
+
+
+@router.get("/{id}", response_model=ResponseEnvelope[ResumeResponse])
+def get_resume(
+    id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve details and extracted text of a specific resume.
+    """
+    resume = (
+        db.query(Resume)
+        .filter(Resume.id == id, Resume.user_id == current_user.id)
+        .first()
+    )
+    if not resume:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resume not found.",
+        )
 
     return {
         "success": True,
