@@ -6,7 +6,13 @@
     UserUpdate,
     TokenRefresh,
     TokenResponse,
+    TokenRefreshResponse,
     ResponseEnvelope,
+)
+from backend.app.schemas.resume_schema import (
+    ResumeBase,
+    ResumeResponse,
+    ResumeSummary,
 )
 
 __all__ = [
@@ -17,5 +23,9 @@ __all__ = [
     "UserUpdate",
     "TokenRefresh",
     "TokenResponse",
+    "TokenRefreshResponse",
     "ResponseEnvelope",
+    "ResumeBase",
+    "ResumeResponse",
+    "ResumeSummary",
 ]
