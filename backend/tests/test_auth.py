@@ -43,7 +43,6 @@ def test_signup_validation_failure(client):
 
 
 def test_login_success(client):
-    # Create user first
     signup_res = client.post(
         "/api/v1/auth/signup",
         json={
@@ -54,7 +53,6 @@ def test_login_success(client):
     )
     assert signup_res.status_code == 201
 
-    # Login
     login_res = client.post(
         "/api/v1/auth/login",
         json={
@@ -72,7 +70,6 @@ def test_login_success(client):
 
 
 def test_login_invalid_credentials(client):
-    # Attempt login with unregistered user
     res = client.post(
         "/api/v1/auth/login",
         json={
@@ -84,3 +81,37 @@ def test_login_invalid_credentials(client):
     data = res.json()
     assert data["success"] is False
     assert "Invalid email or password" in data["error"]
+
+
+def test_refresh_token_success(client):
+    # Signup & login
+    client.post(
+        "/api/v1/auth/signup",
+        json={"name": "Refresh User", "email": "ref@example.com", "password": "password123"},
+    )
+    login_res = client.post(
+        "/api/v1/auth/login",
+        json={"email": "ref@example.com", "password": "password123"},
+    )
+    refresh_token = login_res.json()["data"]["refresh_token"]
+
+    # Call refresh
+    refresh_res = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": refresh_token},
+    )
+    assert refresh_res.status_code == 200
+    data = refresh_res.json()
+    assert data["success"] is True
+    assert "access_token" in data["data"]
+    assert data["data"]["token_type"] == "bearer"
+
+
+def test_refresh_token_invalid(client):
+    res = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": "invalid.jwt.token"},
+    )
+    assert res.status_code == 401
+    data = res.json()
+    assert data["success"] is False
