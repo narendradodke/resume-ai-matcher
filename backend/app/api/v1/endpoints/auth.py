@@ -22,6 +22,7 @@ from backend.app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
+    verify_google_id_token,
 )
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -145,27 +146,29 @@ def get_me(current_user: User = Depends(get_current_user)):
 @router.post("/google", response_model=ResponseEnvelope[TokenResponse])
 def google_auth(auth_in: GoogleAuthRequest, db: Session = Depends(get_db)):
     """
-    Sign in or register a user with Google OAuth credentials.
+    Sign in or register a user with cryptographically verified Google OAuth ID token.
     """
-    target_email = auth_in.email
-    target_name = auth_in.name or "Google User"
-    oauth_id = auth_in.id_token or "google_default_id"
-
-    if not target_email:
+    try:
+        idinfo = verify_google_id_token(auth_in.id_token)
+    except ValueError as e:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Google account email is required for OAuth authentication.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
         )
 
-    user = db.query(User).filter(User.email == target_email.lower()).first()
+    target_email = idinfo["email"].lower()
+    target_name = idinfo.get("name") or target_email.split("@")[0]
+    google_sub = idinfo["sub"]
+
+    user = db.query(User).filter(User.email == target_email).first()
     if not user:
-        # Create user with Google OAuth
+        # Create new user via verified Google OAuth
         user = User(
             name=target_name,
-            email=target_email.lower(),
+            email=target_email,
             password_hash=None,
             oauth_provider="google",
-            oauth_id=oauth_id,
+            oauth_id=google_sub,
             plan="free",
             is_verified=True,
         )
@@ -173,14 +176,29 @@ def google_auth(auth_in: GoogleAuthRequest, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user)
     else:
-        # Update existing user OAuth info if not previously linked
-        if not user.oauth_provider:
+        # Existing user found
+        if user.oauth_provider == "google":
+            # Already linked to Google: verify subject match if present
+            if user.oauth_id and user.oauth_id != google_sub:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Google account mismatch for this email address.",
+                )
+        elif user.oauth_provider is None:
+            # Safe linking: User originally signed up with password.
+            # Link Google OAuth to existing account
             user.oauth_provider = "google"
-            user.oauth_id = oauth_id
+            user.oauth_id = google_sub
             user.is_verified = True
             db.add(user)
             db.commit()
             db.refresh(user)
+        else:
+            # Different OAuth provider
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Account is already associated with another login provider: {user.oauth_provider}",
+            )
 
     access_token = create_access_token(user.id)
     refresh_token = create_refresh_token(user.id)

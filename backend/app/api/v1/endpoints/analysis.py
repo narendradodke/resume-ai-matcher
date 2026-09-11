@@ -1,5 +1,5 @@
 import math
-from typing import Optional
+import logging
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -17,6 +17,8 @@ from backend.app.schemas.analysis_schema import (
     PaginatedAnalyses,
 )
 from backend.app.core.celery_worker import process_analysis_task
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/analysis", tags=["Analysis"])
 
@@ -61,6 +63,7 @@ def run_analysis(
     try:
         process_analysis_task.delay(str(analysis.id))
     except Exception as e:
+        logger.error("Failed to enqueue analysis task id=%s: %s", analysis.id, e)
         analysis.status = "failed"
         db.commit()
         raise HTTPException(

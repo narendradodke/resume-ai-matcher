@@ -68,3 +68,46 @@ def test_user_change_password_invalid_current(client):
     assert res.status_code == 400
     assert res.json()["success"] is False
     assert "verification failed" in res.json()["error"]
+
+
+def test_production_jwt_secret_enforcement():
+    import pytest
+    from backend.app.config import Settings
+
+    # 1. Production + default secret => ValueError
+    with pytest.raises(ValueError, match="FATAL: Insecure, missing, or default JWT_SECRET_KEY"):
+        Settings(
+            ENVIRONMENT="production",
+            JWT_SECRET_KEY="supersecretjwtkey_change_in_production_min32chars_long!",
+        )
+
+    # 2. Production + short secret (<32 chars) => ValueError
+    with pytest.raises(ValueError, match="FATAL: Insecure, missing, or default JWT_SECRET_KEY"):
+        Settings(
+            ENVIRONMENT="production",
+            JWT_SECRET_KEY="short_secret_under_32_chars!",
+        )
+
+    # 3. Production + wildcard CORS => ValueError
+    with pytest.raises(ValueError, match="FATAL: Wildcard"):
+        Settings(
+            ENVIRONMENT="production",
+            JWT_SECRET_KEY="a_very_secure_random_production_secret_key_32_chars_long!",
+            ALLOWED_ORIGINS=["*"],
+        )
+
+    # 4. Production + valid secure key + explicit origins => success
+    valid_settings = Settings(
+        ENVIRONMENT="production",
+        JWT_SECRET_KEY="a_very_secure_random_production_secret_key_32_chars_long!",
+        ALLOWED_ORIGINS=["https://example.com"],
+    )
+    assert valid_settings.ENVIRONMENT == "production"
+    assert len(valid_settings.JWT_SECRET_KEY) >= 32
+
+    # 5. Development environment allows dev secret => success
+    dev_settings = Settings(
+        ENVIRONMENT="development",
+        JWT_SECRET_KEY="dev_secret_key",
+    )
+    assert dev_settings.ENVIRONMENT == "development"

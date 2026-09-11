@@ -18,6 +18,8 @@ coverage/
 .coverage.*
 .pytest_cache/
 htmlcov/
+test-results/
+playwright-report/
 
 # Next.js
 .next/

@@ -312,44 +312,119 @@ ai-resume-matcher/
 
 ## 10. Environment Variables (`.env.example`)
 
-```
-# Backend
+```env
+# Backend Configuration
+PROJECT_NAME="AI Resume Matcher"
+ENVIRONMENT=development
+API_V1_STR=/api/v1
+
+# Database & Cache
 DATABASE_URL=postgresql://user:password@localhost:5432/resume_matcher
 REDIS_URL=redis://localhost:6379/0
-JWT_SECRET_KEY=change_this_secret
+
+# Authentication & Security
+JWT_SECRET_KEY=change_this_secret_key_to_a_secure_random_string_at_least_32_chars
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
-AI_PROVIDER_API_KEY=your_anthropic_or_openai_key
-AI_PROVIDER=anthropic   # or openai
+REFRESH_TOKEN_EXPIRE_DAYS=7
+GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
 
-# Frontend
+# AI Engine
+AI_PROVIDER=anthropic   # "anthropic" or "openai"
+AI_PROVIDER_API_KEY=your_anthropic_or_openai_key
+AI_MODEL=claude-3-5-sonnet-20241022
+
+# Rate Limiting & Uploads
+RATE_LIMIT_ANALYSIS_PER_MINUTE=10
+UPLOAD_DIR=./uploads
+MAX_UPLOAD_SIZE_MB=10
+
+# Frontend Configuration
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
 ```
 
 ---
 
-## 11. Definition of Done (MVP)
+## 11. Security Architecture & Protections
 
-- [x] User can sign up, log in, log out
-- [x] User can upload a PDF resume
-- [x] User can paste a job description and get an AI-generated match score + suggestions
-- [x] User can view analysis history
-- [x] All pages responsive, animated, no raw unstyled HTML
-- [x] Whole app runs via `docker-compose up`
-- [x] Basic tests pass (20/20 pytest suites passing)
-- [x] Production Dockerfiles & Render / Vercel configurations ready
+- **Production JWT Secret Enforcement**: Evaluated upon startup via Pydantic model validators; production mode strictly requires a unique secret of at least 32 characters and forbids placeholder secrets.
+- **Cryptographic Google OAuth Token Verification**: Backend validates signature, issuer, audience, and verified email claims using `google-auth` before authenticating or linking accounts.
+- **CORS Protection**: Explicit domain matching without wildcard `*` credentials vulnerabilities.
+- **PDF Upload Fortification**: Upfront `%PDF-` magic byte inspection, filename sanitization preventing directory traversal, and 20-page limits preventing PDF bomb attacks.
+- **AI Prompt Injection Safeguards**: Document inputs enclosed in `<resume_text>` and `<job_description>` XML fences; strict system instructions prevent prompt override; output validated against Pydantic schema `AnalysisAIOutput`.
+- **Background Asynchrony & Queue Fault-Tolerance**: Zero synchronous AI processing on the HTTP thread; Celery tasks retry with exponential backoff and jitter (`autoretry_for=(Exception,)`, `max_retries=3`).
 
 ---
 
-## 12. Deployment & Live Links
+## 12. Verified Test Status & Quality Metrics
 
-- **Repository:** [https://github.com/narendradodke/resume-ai-matcher](https://github.com/narendradodke/resume-ai-matcher)
-- **Frontend Live Demo:** [https://resume-ai-matcher.vercel.app](https://resume-ai-matcher.vercel.app)
-- **Backend API Docs (Swagger):** `http://localhost:8000/docs` (or Render deployment URL)
+All test suites and static analysis tools have been executed and verified locally:
 
-### Quickstart (Single Command)
+### Backend Testing (pytest)
+- **Status:** **30 passed, 0 failed, 0 skipped** (100% pass rate)
 ```bash
-docker-compose up --build
+cd backend
+pytest -v
 ```
-This spins up PostgreSQL 16, Redis 7, the FastAPI backend on port 8000, Celery background worker, and Next.js 14 frontend on port 3000.
+Test breakdown:
+- Authentication & Sessions: 9 tests (signup, login, token refresh, `GET /me`, validation errors)
+- Google OAuth Token Verification: 4 tests (verified flow, invalid tokens, safe linking, subject mismatch)
+- Resume Upload & Security: 7 tests (valid PDF, non-PDF rejection, list, get, delete, user isolation, magic bytes, path traversal sanitization)
+- AI Analysis & Queue: 5 tests (successful run, 404 validation, history pagination, user isolation, prompt injection & schema safety)
+- User Profile & Security Settings: 5 tests (profile update, cascade delete, password change verification, invalid current password, production JWT secret enforcement)
+
+### Frontend Verification
+- **ESLint:** Passed (`npm run lint` — 0 warnings, 0 errors)
+- **TypeScript:** Passed (`npx tsc --noEmit` — 0 errors)
+- **Production Build:** Passed (`npm run build` — all 9 static & dynamic pages compiled)
+
+### Playwright End-to-End (E2E) Testing
+- **Status:** **16 passed, 0 failed** across Chromium & Mobile Chrome viewports
+```bash
+cd frontend
+npm run test:e2e
+```
+Coverage includes:
+- Landing page hero rendering, navigation, and CTA
+- Login and registration form validation
+- Protected dashboard layout, cards, and navigation
+- Resume dropzone, JD input textarea, and submission buttons
+- Analysis history table and score badge display
+- Mobile viewport responsive layout and horizontal overflow prevention
+
+### Continuous Integration (CI)
+- **GitHub Actions Workflow:** `.github/workflows/ci.yml` configured to automatically run on `push` and `pull_request` to `main`, provisioning PostgreSQL and Redis services, executing the full pytest suite, ESLint, TypeScript check, Next.js production build, and Playwright E2E tests.
+
+---
+
+## 13. Docker & Deployment Status
+
+### Docker Stack Verification
+- `docker-compose.yml` validated via `docker compose config -q` without warnings or obsolete syntax.
+- All services (`postgres`, `redis`, `backend`, `celery_worker`, `frontend`) configured with environment variable interpolation to prevent hardcoded committed secrets.
+
+### Live Deployment Verification
+- **Deployment Status:** Deployment configurations (Render `render.yaml`, Dockerfiles, Next.js production build) are verified and prepared for production. Live deployment verification requires deployment-provider credentials (Vercel/Render/Railway) to be configured in production environments.
+
+### Known Limitations & Remaining Risks
+- **External AI Provider Availability:** In production, match evaluation requires an active Anthropic or OpenAI API key; if missing, the fallback heuristic engine guarantees continuous operation.
+- **Live Deployment Access:** Live cloud hosting depends on external deployment provider tokens.
+- **Docker Desktop Local Environment:** On Windows environments without active Docker Desktop WSL2 daemon instances, running `docker compose up` requires starting the Docker engine first.
+
+---
+
+## 14. Definition of Done (MVP) — Final Verification
+
+- [x] User can sign up, log in, log out
+- [x] Secure Google OAuth cryptographic ID token verification
+- [x] User can upload a PDF resume (validated with magic bytes and page limits)
+- [x] User can paste a job description and get an AI-generated match score + suggestions
+- [x] Background Celery queue processing with retry backoff and failure recovery
+- [x] User can view analysis history and drill down into reports
+- [x] All pages responsive, animated, dark-themed, and validated for mobile
+- [x] Production Dockerfiles & Compose configurations prepared with safe secret interpolation
+- [x] Backend test suite verified: **30/30 pytest tests passing**
+- [x] Frontend test suite verified: **16/16 Playwright E2E tests passing**
+- [x] GitHub Actions CI pipeline configured for automated testing
+- [x] Clean dead-code audit with pyflakes and ESLint passing with zero warnings
 

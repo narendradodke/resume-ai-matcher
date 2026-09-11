@@ -64,6 +64,4 @@ class PasswordChange(BaseModel):
 
 
 class GoogleAuthRequest(BaseModel):
-    id_token: Optional[str] = None
-    email: Optional[EmailStr] = None
-    name: Optional[str] = None
+    id_token: str = Field(..., min_length=10, description="Google OAuth ID token")

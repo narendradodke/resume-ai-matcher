@@ -4,15 +4,15 @@ services:
     container_name: resume_matcher_postgres
     restart: always
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: resume_matcher
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-resume_matcher}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d resume_matcher"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-user} -d $${POSTGRES_DB:-resume_matcher}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -40,12 +40,13 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/resume_matcher
-      - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET_KEY=production_jwt_secret_key_change_me_in_env_file_12345
-      - JWT_ALGORITHM=HS256
-      - AI_PROVIDER=anthropic
+      - DATABASE_URL=${DATABASE_URL:-postgresql://user:password@postgres:5432/resume_matcher}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-supersecretjwtkey_change_in_production_min32chars_long!}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - AI_PROVIDER=${AI_PROVIDER:-anthropic}
       - AI_PROVIDER_API_KEY=${AI_PROVIDER_API_KEY:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,10 +63,10 @@ services:
     restart: always
     command: ["celery", "-A", "app.core.celery_worker.celery_app", "worker", "--loglevel=info"]
     environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/resume_matcher
-      - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET_KEY=production_jwt_secret_key_change_me_in_env_file_12345
-      - AI_PROVIDER=anthropic
+      - DATABASE_URL=${DATABASE_URL:-postgresql://user:password@postgres:5432/resume_matcher}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-supersecretjwtkey_change_in_production_min32chars_long!}
+      - AI_PROVIDER=${AI_PROVIDER:-anthropic}
       - AI_PROVIDER_API_KEY=${AI_PROVIDER_API_KEY:-}
     depends_on:
       postgres:

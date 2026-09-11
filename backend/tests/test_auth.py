@@ -152,29 +152,89 @@ def test_get_me_unauthorized(client):
     assert res_bad.status_code == 401
 
 
+from unittest.mock import patch
+
+
 def test_google_auth_flow(client):
-    # 1. Sign up/in via Google OAuth
-    res = client.post(
-        "/api/v1/auth/google",
-        json={"email": "googleuser@example.com", "name": "Google Tester", "id_token": "mock_google_id_123"},
+    mock_idinfo = {
+        "iss": "https://accounts.google.com",
+        "sub": "google_uid_98765",
+        "email": "googleuser@example.com",
+        "email_verified": True,
+        "name": "Google Tester",
+    }
+    with patch("backend.app.api.v1.endpoints.auth.verify_google_id_token", return_value=mock_idinfo):
+        # 1. Sign up/in via verified Google OAuth token
+        res = client.post(
+            "/api/v1/auth/google",
+            json={"id_token": "valid_signed_google_id_token"},
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["success"] is True
+        assert "access_token" in data["data"]
+        assert data["data"]["user"]["email"] == "googleuser@example.com"
+        assert data["data"]["user"]["is_verified"] is True
+
+        # 2. Re-login with existing verified Google user
+        res_relogin = client.post(
+            "/api/v1/auth/google",
+            json={"id_token": "valid_signed_google_id_token"},
+        )
+        assert res_relogin.status_code == 200
+        assert "access_token" in res_relogin.json()["data"]
+
+
+def test_google_auth_invalid_token(client):
+    with patch("backend.app.api.v1.endpoints.auth.verify_google_id_token", side_effect=ValueError("Invalid signature or expired token")):
+        res = client.post("/api/v1/auth/google", json={"id_token": "bad_token_value_12345"})
+        assert res.status_code == 401
+        assert res.json()["success"] is False
+        assert "Invalid signature" in res.json()["error"]
+
+
+def test_google_auth_safe_linking_with_password_user(client):
+    # User signs up with email and password first
+    client.post(
+        "/api/v1/auth/signup",
+        json={"name": "Existing User", "email": "linkme@example.com", "password": "password123"},
     )
-    assert res.status_code == 200
-    data = res.json()
-    assert data["success"] is True
-    assert "access_token" in data["data"]
-    assert data["data"]["user"]["email"] == "googleuser@example.com"
-    assert data["data"]["user"]["is_verified"] is True
 
-    # 2. Re-login with existing email via Google
-    res_relogin = client.post(
-        "/api/v1/auth/google",
-        json={"email": "googleuser@example.com", "name": "Google Tester", "id_token": "mock_google_id_123"},
-    )
-    assert res_relogin.status_code == 200
-    assert "access_token" in res_relogin.json()["data"]
+    mock_idinfo = {
+        "iss": "https://accounts.google.com",
+        "sub": "google_uid_55555",
+        "email": "linkme@example.com",
+        "email_verified": True,
+        "name": "Existing User",
+    }
+    with patch("backend.app.api.v1.endpoints.auth.verify_google_id_token", return_value=mock_idinfo):
+        # Now logs in with verified Google OAuth for same email
+        res = client.post("/api/v1/auth/google", json={"id_token": "valid_link_token_12345"})
+        assert res.status_code == 200
+        assert res.json()["success"] is True
+        assert res.json()["data"]["user"]["email"] == "linkme@example.com"
 
 
-def test_google_auth_missing_email(client):
-    res = client.post("/api/v1/auth/google", json={"name": "No Email User"})
-    assert res.status_code == 400
-    assert res.json()["success"] is False
+def test_google_auth_subject_mismatch(client):
+    mock_user_a = {
+        "iss": "https://accounts.google.com",
+        "sub": "google_uid_original",
+        "email": "mismatch@example.com",
+        "email_verified": True,
+        "name": "Mismatch Tester",
+    }
+    mock_user_b = {
+        "iss": "https://accounts.google.com",
+        "sub": "google_uid_attacker_different",
+        "email": "mismatch@example.com",
+        "email_verified": True,
+        "name": "Mismatch Tester",
+    }
+    with patch("backend.app.api.v1.endpoints.auth.verify_google_id_token", return_value=mock_user_a):
+        res1 = client.post("/api/v1/auth/google", json={"id_token": "token_original_12345"})
+        assert res1.status_code == 200
+
+    with patch("backend.app.api.v1.endpoints.auth.verify_google_id_token", return_value=mock_user_b):
+        res2 = client.post("/api/v1/auth/google", json={"id_token": "token_diff_12345"})
+        assert res2.status_code == 403
+        assert "Google account mismatch" in res2.json()["error"]
