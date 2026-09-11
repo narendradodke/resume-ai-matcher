@@ -24,6 +24,10 @@ services:
         value: anthropic
       - key: AI_PROVIDER_API_KEY
         sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: ALLOWED_ORIGINS
+        value: https://resume-ai-matcher.vercel.app,https://ai-resume-matcher-app.vercel.app
 
   - type: redis
     name: resume-matcher-redis

@@ -329,6 +329,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
 GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
 
+# CORS Configuration (Comma-separated or JSON list of allowed origins)
+ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,https://resume-ai-matcher.vercel.app,https://ai-resume-matcher-app.vercel.app
+
 # AI Engine
 AI_PROVIDER=anthropic   # "anthropic" or "openai"
 AI_PROVIDER_API_KEY=your_anthropic_or_openai_key
@@ -340,6 +343,9 @@ UPLOAD_DIR=./uploads
 MAX_UPLOAD_SIZE_MB=10
 
 # Frontend Configuration
+# NOTE: In Next.js, `NEXT_PUBLIC_*` variables are statically inlined at BUILD TIME.
+# For local dev: http://localhost:8000/api/v1
+# For Vercel production: Set in Vercel project environment variables (e.g. https://resume-matcher-backend.onrender.com/api/v1)
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
 ```
 
@@ -349,7 +355,9 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
 
 - **Production JWT Secret Enforcement**: Evaluated upon startup via Pydantic model validators; production mode strictly requires a unique secret of at least 32 characters and forbids placeholder secrets.
 - **Cryptographic Google OAuth Token Verification**: Backend validates signature, issuer, audience, and verified email claims using `google-auth` before authenticating or linking accounts.
-- **CORS Protection**: Explicit domain matching without wildcard `*` credentials vulnerabilities.
+- **Strict Production CORS & Origin Normalization**: Pydantic validator parses comma-separated or JSON origin lists, strips trailing slashes to ensure exact origin matching, and rejects wildcard `*` in production when credentials are enabled.
+- **Production API URL Guard**: Frontend `validateApiBaseUrl` prevents production builds from silently falling back to `localhost`, failing fast if the backend URL is omitted during deployment.
+- **Sanitized Client Error Handling**: Client-side `formatApiError` cleanly differentiates network/unreachable server issues, 401 unauthenticated, 409 conflict, 422 validation, and 429 rate limit without exposing server stack traces or database errors.
 - **PDF Upload Fortification**: Upfront `%PDF-` magic byte inspection, filename sanitization preventing directory traversal, and 20-page limits preventing PDF bomb attacks.
 - **AI Prompt Injection Safeguards**: Document inputs enclosed in `<resume_text>` and `<job_description>` XML fences; strict system instructions prevent prompt override; output validated against Pydantic schema `AnalysisAIOutput`.
 - **Background Asynchrony & Queue Fault-Tolerance**: Zero synchronous AI processing on the HTTP thread; Celery tasks retry with exponential backoff and jitter (`autoretry_for=(Exception,)`, `max_retries=3`).
@@ -361,7 +369,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
 All test suites and static analysis tools have been executed and verified locally:
 
 ### Backend Testing (pytest)
-- **Status:** **30 passed, 0 failed, 0 skipped** (100% pass rate)
+- **Status:** **36 passed, 0 failed, 0 skipped** (100% pass rate)
 ```bash
 cd backend
 pytest -v
@@ -369,6 +377,7 @@ pytest -v
 Test breakdown:
 - Authentication & Sessions: 9 tests (signup, login, token refresh, `GET /me`, validation errors)
 - Google OAuth Token Verification: 4 tests (verified flow, invalid tokens, safe linking, subject mismatch)
+- CORS & Origin Normalization: 6 tests (preflight OPTIONS, disallowed origins, health check origins, comma-separated parsing, JSON list parsing, production wildcard rejection)
 - Resume Upload & Security: 7 tests (valid PDF, non-PDF rejection, list, get, delete, user isolation, magic bytes, path traversal sanitization)
 - AI Analysis & Queue: 5 tests (successful run, 404 validation, history pagination, user isolation, prompt injection & schema safety)
 - User Profile & Security Settings: 5 tests (profile update, cascade delete, password change verification, invalid current password, production JWT secret enforcement)
@@ -379,14 +388,19 @@ Test breakdown:
 - **Production Build:** Passed (`npm run build` — all 9 static & dynamic pages compiled)
 
 ### Playwright End-to-End (E2E) Testing
-- **Status:** **16 passed, 0 failed** across Chromium & Mobile Chrome viewports
+- **Status:** **26 passed, 0 failed** across Chromium & Mobile Chrome viewports
 ```bash
 cd frontend
 npm run test:e2e
 ```
 Coverage includes:
+- API base URL configuration validator (production requirement enforcement & trailing slash normalization)
 - Landing page hero rendering, navigation, and CTA
 - Login and registration form validation
+- Signup network flow assertion (verifying POST to `/api/v1/auth/signup`, payload schema, and session redirect)
+- Signup network error handling (verifying graceful diagnostic message without navigating away)
+- Signup 409 duplicate email handling
+- Login error handling (401 invalid credentials and network error states)
 - Protected dashboard layout, cards, and navigation
 - Resume dropzone, JD input textarea, and submission buttons
 - Analysis history table and score badge display
@@ -417,14 +431,16 @@ Coverage includes:
 
 - [x] User can sign up, log in, log out
 - [x] Secure Google OAuth cryptographic ID token verification
+- [x] Strict CORS configuration with dynamic origin parsing and trailing slash normalization
+- [x] Production API URL enforcement preventing silent localhost fallback
 - [x] User can upload a PDF resume (validated with magic bytes and page limits)
 - [x] User can paste a job description and get an AI-generated match score + suggestions
 - [x] Background Celery queue processing with retry backoff and failure recovery
 - [x] User can view analysis history and drill down into reports
 - [x] All pages responsive, animated, dark-themed, and validated for mobile
 - [x] Production Dockerfiles & Compose configurations prepared with safe secret interpolation
-- [x] Backend test suite verified: **30/30 pytest tests passing**
-- [x] Frontend test suite verified: **16/16 Playwright E2E tests passing**
+- [x] Backend test suite verified: **36/36 pytest tests passing**
+- [x] Frontend test suite verified: **26/26 Playwright E2E tests passing**
 - [x] GitHub Actions CI pipeline configured for automated testing
 - [x] Clean dead-code audit with pyflakes and ESLint passing with zero warnings
 

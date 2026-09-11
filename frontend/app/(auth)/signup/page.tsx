@@ -2,11 +2,12 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Sparkles, ArrowRight, Lock, Mail, User, Loader2, AlertCircle, CheckCircle } from "lucide-react";
+import { Sparkles, ArrowRight, Lock, Mail, User, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
+import { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 
 export default function SignupPage() {
@@ -42,11 +43,8 @@ export default function SignupPage() {
     try {
       await signup(name.trim(), email, password);
       toast.success("Account created! Welcome to ResumeAI.");
-    } catch (err: any) {
-      const msg =
-        err?.response?.data?.error ||
-        err?.message ||
-        "Registration failed. Please try a different email.";
+    } catch (err: unknown) {
+      const msg = formatApiError(err, "Registration failed. Please try a different email.");
       setErrorMsg(msg);
       toast.error(msg);
     } finally {

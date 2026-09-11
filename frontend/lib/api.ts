@@ -1,7 +1,97 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
+/**
+ * Validates and resolves the backend API base URL.
+ * 
+ * Rules:
+ * 1. In production (NODE_ENV === "production"):
+ *    - NEXT_PUBLIC_API_BASE_URL must be explicitly provided at build time.
+ *    - Silent fallback to localhost is strictly prohibited.
+ * 2. In development/test:
+ *    - Defaults to "http://localhost:8000/api/v1".
+ * 3. Trailing slashes are always removed to prevent double-slash path concatenation.
+ */
+export function validateApiBaseUrl(
+  envUrl?: string,
+  nodeEnv: string = process.env.NODE_ENV || "development"
+): string {
+  const trimmed = envUrl?.trim();
+  if (nodeEnv === "production") {
+    if (!trimmed) {
+      throw new Error(
+        "NEXT_PUBLIC_API_BASE_URL is not configured. In production mode, a valid backend API URL must be defined at build time."
+      );
+    }
+    return trimmed.replace(/\/+$/, "");
+  }
+
+  const defaultUrl = "http://localhost:8000/api/v1";
+  return (trimmed || defaultUrl).replace(/\/+$/, "");
+}
+
+export const API_BASE_URL = validateApiBaseUrl(
+  process.env.NEXT_PUBLIC_API_BASE_URL,
+  process.env.NODE_ENV
+);
+
+/**
+ * Formats API and network errors into safe, user-friendly messages.
+ * Never exposes stack traces, database details, or raw secrets.
+ */
+export function formatApiError(
+  error: unknown,
+  fallbackMessage: string = "An unexpected error occurred. Please try again."
+): string {
+  if (axios.isAxiosError(error)) {
+    // 1. Network / connectivity error (no response received from backend)
+    if (!error.response) {
+      if (error.code === "ECONNABORTED" || error.message?.toLowerCase().includes("timeout")) {
+        return "Request timed out. The server took too long to respond.";
+      }
+      return "Unable to reach the server. Please check your connection or backend status.";
+    }
+
+    const status = error.response.status;
+    const data = error.response.data as { error?: string; detail?: string; message?: string } | undefined;
+    const backendMessage = data?.error || data?.detail || data?.message;
+
+    switch (status) {
+      case 400:
+        return backendMessage || "Bad request. Please verify your inputs.";
+      case 401:
+        return backendMessage || "Invalid credentials or session expired. Please sign in.";
+      case 403:
+        return backendMessage || "Access forbidden. You do not have permission.";
+      case 404:
+        return backendMessage || "The requested resource could not be found.";
+      case 409:
+        return backendMessage || "An account with this email already exists.";
+      case 422:
+        return backendMessage || "Invalid data submitted. Please check the required fields.";
+      case 429:
+        return "Too many requests. Please slow down and try again shortly.";
+      case 500:
+      case 502:
+      case 503:
+      case 504:
+        return "Service temporarily unavailable. Please try again in a few moments.";
+      default:
+        if (backendMessage && typeof backendMessage === "string" && backendMessage.length < 200) {
+          return backendMessage;
+        }
+        return fallbackMessage;
+    }
+  }
+
+  if (error instanceof Error) {
+    if (error.message?.toLowerCase().includes("network error") || error.message?.includes("Failed to fetch")) {
+      return "Unable to reach the server. Please check your connection or backend status.";
+    }
+    return error.message;
+  }
+
+  return fallbackMessage;
+}
 
 export const api = axios.create({
   baseURL: API_BASE_URL,

@@ -1,6 +1,7 @@
 from functools import lru_cache
-from typing import List, Optional
-from pydantic import model_validator
+import json
+from typing import Any, List, Optional
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,8 +40,29 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://resume-ai-matcher.vercel.app",
         "https://ai-resume-matcher-app.vercel.app",
     ]
+
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: Any) -> List[str]:
+        """Normalize allowed origins: parse comma-separated strings or lists, stripping whitespace and trailing slashes."""
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return []
+            if v.startswith("[") and v.endswith("]"):
+                try:
+                    parsed = json.loads(v)
+                    if isinstance(parsed, list):
+                        return [str(origin).strip().rstrip("/") for origin in parsed if str(origin).strip()]
+                except Exception:
+                    pass
+            return [origin.strip().rstrip("/") for origin in v.split(",") if origin.strip()]
+        elif isinstance(v, (list, tuple, set)):
+            return [str(origin).strip().rstrip("/") for origin in v if str(origin).strip()]
+        return v
 
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
+import { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 
 export default function LoginPage() {
@@ -30,11 +31,8 @@ export default function LoginPage() {
     try {
       await login(email, password);
       toast.success("Welcome back! Redirecting to dashboard...");
-    } catch (err: any) {
-      const msg =
-        err?.response?.data?.error ||
-        err?.message ||
-        "Invalid email or password. Please try again.";
+    } catch (err: unknown) {
+      const msg = formatApiError(err, "Invalid email or password. Please try again.");
       setErrorMsg(msg);
       toast.error(msg);
     } finally {
