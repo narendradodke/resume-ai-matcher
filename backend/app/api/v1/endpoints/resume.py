@@ -27,7 +27,6 @@ async def upload_resume(
     """
     Upload a resume in PDF format, extract its text content, and store it.
     """
-    # 1. Validate file extension
     filename = file.filename or "resume.pdf"
     if not filename.lower().endswith(".pdf"):
         raise HTTPException(
@@ -35,7 +34,6 @@ async def upload_resume(
             detail="Invalid file format. Only PDF files are supported.",
         )
 
-    # 2. Read contents and validate size
     content = await file.read()
     max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
     if len(content) > max_bytes:
@@ -50,7 +48,6 @@ async def upload_resume(
             detail="Uploaded file is empty.",
         )
 
-    # 3. Extract text from PDF
     try:
         extracted_text = extract_text_from_pdf(content)
     except ValueError as ve:
@@ -64,7 +61,6 @@ async def upload_resume(
             detail=f"Failed to process PDF resume: {str(e)}",
         )
 
-    # 4. Save file to disk
     user_upload_dir = Path(settings.UPLOAD_DIR) / str(current_user.id)
     user_upload_dir.mkdir(parents=True, exist_ok=True)
     saved_filename = f"{uuid.uuid4().hex}_{Path(filename).name}"
@@ -72,7 +68,6 @@ async def upload_resume(
     with open(file_path, "wb") as f:
         f.write(content)
 
-    # 5. Save resume record in DB
     resume = Resume(
         user_id=current_user.id,
         file_url=str(file_path.as_posix()),
@@ -133,5 +128,42 @@ def get_resume(
     return {
         "success": True,
         "data": ResumeResponse.model_validate(resume),
+        "error": None,
+    }
+
+
+@router.delete("/{id}", response_model=ResponseEnvelope[dict])
+def delete_resume(
+    id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Delete a resume from database and remove stored file on disk.
+    """
+    resume = (
+        db.query(Resume)
+        .filter(Resume.id == id, Resume.user_id == current_user.id)
+        .first()
+    )
+    if not resume:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resume not found.",
+        )
+
+    # Safely remove file on disk if exists
+    try:
+        if os.path.exists(resume.file_url):
+            os.remove(resume.file_url)
+    except OSError:
+        pass
+
+    db.delete(resume)
+    db.commit()
+
+    return {
+        "success": True,
+        "data": {"message": "Resume deleted successfully."},
         "error": None,
     }
