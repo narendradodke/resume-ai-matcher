@@ -58,7 +58,7 @@ async def upload_resume(
         extracted_text = extract_text_from_pdf(content)
     except ValueError as ve:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(ve),
         )
     except Exception as e:
