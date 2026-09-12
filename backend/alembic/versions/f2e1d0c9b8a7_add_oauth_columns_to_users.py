@@ -1,4 +1,4 @@
-﻿"""add_oauth_columns_to_users
+"""add_oauth_columns_to_users
 
 Revision ID: f2e1d0c9b8a7
 Revises: c1a2b3c4d5e6

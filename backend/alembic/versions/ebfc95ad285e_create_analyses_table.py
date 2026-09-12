@@ -1,4 +1,4 @@
-﻿"""create_analyses_table
+"""create_analyses_table
 
 Revision ID: ebfc95ad285e
 Revises: 1f7bcae14b59

@@ -1,4 +1,4 @@
-﻿from backend.app.schemas.user_schema import (
+from backend.app.schemas.user_schema import (
     UserBase,
     UserCreate,
     UserLogin,

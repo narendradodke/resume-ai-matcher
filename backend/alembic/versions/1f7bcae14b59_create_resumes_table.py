@@ -1,4 +1,4 @@
-﻿"""create_resumes_table
+"""create_resumes_table
 
 Revision ID: 1f7bcae14b59
 Revises: d6df0fff1aca
