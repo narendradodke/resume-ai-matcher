@@ -3,9 +3,12 @@ services:
     image: postgres:16-alpine
     container_name: resume_matcher_postgres
     restart: always
+    env_file:
+      - path: .env
+        required: false
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: ${POSTGRES_DB:-resume_matcher}
     ports:
       - "5432:5432"
@@ -39,10 +42,13 @@ services:
     restart: always
     ports:
       - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql://user:password@postgres:5432/resume_matcher}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-resume_matcher}}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-supersecretjwtkey_change_in_production_min32chars_long!}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set in .env}
       - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
       - AI_PROVIDER=${AI_PROVIDER:-anthropic}
       - AI_PROVIDER_API_KEY=${AI_PROVIDER_API_KEY:-}
@@ -62,10 +68,13 @@ services:
     container_name: resume_matcher_celery
     restart: always
     command: ["celery", "-A", "app.core.celery_worker.celery_app", "worker", "--loglevel=info"]
+    env_file:
+      - path: .env
+        required: false
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql://user:password@postgres:5432/resume_matcher}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-resume_matcher}}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-supersecretjwtkey_change_in_production_min32chars_long!}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set in .env}
       - AI_PROVIDER=${AI_PROVIDER:-anthropic}
       - AI_PROVIDER_API_KEY=${AI_PROVIDER_API_KEY:-}
     depends_on:
@@ -84,8 +93,11 @@ services:
     restart: always
     ports:
       - "3000:3000"
+    env_file:
+      - path: .env
+        required: false
     environment:
-      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
+      - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000/api/v1}
     depends_on:
       - backend
 

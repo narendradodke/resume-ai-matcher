@@ -416,6 +416,7 @@ Coverage includes:
 ### Docker Stack Verification
 - `docker-compose.yml` validated via `docker compose config -q` without warnings or obsolete syntax.
 - All services (`postgres`, `redis`, `backend`, `celery_worker`, `frontend`) configured with environment variable interpolation to prevent hardcoded committed secrets.
+- **Important**: An active `.env` file (copied from `.env.example` and populated with a real, secure `JWT_SECRET_KEY` and database credentials) must be created and populated before running `docker-compose up` or `docker compose up`.
 
 ### Live Deployment Verification
 - **Deployment Status:** Deployment configurations (Render `render.yaml`, Dockerfiles, Next.js production build) are verified and prepared for production. Live deployment verification requires deployment-provider credentials (Vercel/Render/Railway) to be configured in production environments.
