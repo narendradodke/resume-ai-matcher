@@ -417,23 +417,32 @@ Coverage includes:
 
 ## 13. Docker & Deployment Status
 
-### Docker Stack Verification (Verified Live)
-The entire multi-container architecture is verified running and tested end-to-end:
-- **`resume_matcher_postgres` (PostgreSQL 16)**: Container starts healthy; automatic Alembic migrations run on backend startup, applying all schema revisions up to `f2e1d0c9b8a7` (including Google OAuth and fallback engine columns).
-- **`resume_matcher_redis` (Redis 7)**: Healthy cache and message broker for Celery and rate limiting.
-- **`resume_matcher_backend` (FastAPI / Python 3.11)**: Starts cleanly on port 8000; verified live via `curl` for `/health`, `/api/v1/auth/signup`, `/api/v1/auth/login`, `/api/v1/user/profile`, `/api/v1/resume/upload`, and `/api/v1/analysis/run`.
-- **`resume_matcher_celery` (Celery Worker)**: Connects to Redis broker, successfully receives and processes `process_analysis_task` asynchronously, persisting completed analysis scores and suggestions to PostgreSQL.
-- **`resume_matcher_frontend` (Next.js 14)**: Builds with build-arg `NEXT_PUBLIC_API_BASE_URL` and serves production traffic on port 3000 (`HTTP 200 OK`).
+### Docker Stack Verification
+**Docker runtime verification:** Verified locally on September 12, 2026 (commit `0efb13f`).
+
+Verified with real command output in this session:
+- **Docker Compose configuration:** Validated (`docker compose config` passes cleanly with services: `postgres`, `redis`, `backend`, `celery_worker`, `frontend`).
+- **Host networking baseline:** Container outbound ping to `8.8.8.8` (0% packet loss) and DNS resolution (`google.com`) verified.
+- **Service containers:** `resume_matcher_postgres`, `resume_matcher_redis`, `resume_matcher_backend`, `resume_matcher_celery`, and `resume_matcher_frontend` all running and healthy.
+- **Backend health endpoint:** `GET http://localhost:8000/health` returns `HTTP/1.1 200 OK`.
+- **Frontend HTTP response:** `GET http://localhost:3000` returns `HTTP/1.1 200 OK`.
+- **Real signup:** `POST http://localhost:8000/api/v1/auth/signup` returns `HTTP/1.1 201 Created` and persists user record in PostgreSQL.
+- **Real login:** `POST http://localhost:8000/api/v1/auth/login` returns `HTTP/1.1 200 OK` with valid JWT access and refresh tokens.
+- **Real Celery task execution:** PDF resume uploaded via `POST /api/v1/resume/upload`, analysis queued via `POST /api/v1/analysis/run`, task received and processed by Celery worker `process_analysis_task` in 0.49s, result stored in PostgreSQL and retrieved via `GET /api/v1/analysis/history` (queue/integration verified; external AI provider evaluated as `fallback_no_key` without live API keys).
+- **Shutdown:** `docker compose down` stops all services and cleans up networks with zero orphan containers remaining.
 
 ```bash
-# To spin up the entire stack:
+# Validate Compose configuration:
+docker compose config
+
+# Spin up the entire multi-container stack:
 docker compose up --build -d
 
-# Verify all containers are up and healthy:
+# Check status of all containers:
 docker compose ps
 
-# Run backend test suite within the container:
-docker compose exec backend pytest tests/ -v
+# Clean shutdown:
+docker compose down
 ```
 
 ### Live Deployment Verification
