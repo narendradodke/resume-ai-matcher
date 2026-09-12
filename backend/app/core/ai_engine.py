@@ -49,7 +49,7 @@ Return ONLY a valid JSON object matching this schema:
 
 
 def _heuristic_fallback_analysis(
-    resume_text: str, job_description: str, engine_used: str = "fallback_heuristic"
+    resume_text: str, job_description: str, engine_used: str = "fallback_no_key"
 ) -> Dict[str, Any]:
     """
     Intelligent keyword-based analysis used when no external AI API key is configured
@@ -108,7 +108,7 @@ def analyze_resume_against_job(resume_text: str, job_description: str) -> Dict[s
 
     # If no API key configured (local development/testing), use heuristic engine cleanly
     if not api_key or api_key.startswith("your_") or api_key.strip() == "":
-        return _heuristic_fallback_analysis(resume_text, job_description, engine_used="fallback_heuristic")
+        return _heuristic_fallback_analysis(resume_text, job_description, engine_used="fallback_no_key")
 
     prompt_user = f"""<resume_text>
 {resume_text}

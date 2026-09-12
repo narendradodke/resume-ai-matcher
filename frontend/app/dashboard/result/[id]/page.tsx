@@ -29,6 +29,7 @@ interface AnalysisResult {
   missing_keywords: string[] | null;
   suggestions: string | null;
   status: string;
+  engine_used?: string | null;
   created_at: string;
 }
 
@@ -153,14 +154,32 @@ export default function AnalysisResultPage() {
           </div>
 
           <div className="md:col-span-2 space-y-4">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="default" className="text-xs capitalize">
                 Status: {analysis.status}
               </Badge>
+              {analysis.engine_used && analysis.engine_used !== "ai" ? (
+                <Badge variant="outline" className="text-xs border-amber-500/40 bg-amber-500/10 text-amber-300">
+                  Fallback Engine ({analysis.engine_used === "fallback_after_error" ? "AI error fallback" : "no API key"})
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-xs border-emerald-500/40 bg-emerald-500/10 text-emerald-300">
+                  AI Powered
+                </Badge>
+              )}
               <span className="text-xs text-slate-500">
                 Analyzed on {new Date(analysis.created_at).toLocaleDateString()}
               </span>
             </div>
+
+            {analysis.engine_used && analysis.engine_used !== "ai" && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-950/30 border border-amber-500/20 text-xs text-amber-300">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+                <span>
+                  Analysis generated using keyword-matching fallback (AI provider unavailable).
+                </span>
+              </div>
+            )}
 
             <h2 className="text-2xl font-bold text-white">
               {score >= 80

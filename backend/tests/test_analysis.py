@@ -144,7 +144,7 @@ def test_ai_engine_schema_and_prompt_safety():
     # Validate against AnalysisAIOutput schema directly
     validated = AnalysisAIOutput.model_validate(result)
     assert 0 <= validated.match_score <= 100
-    assert result["engine_used"] == "fallback_heuristic"
+    assert result["engine_used"] == "fallback_no_key"
 
 
 def test_ai_engine_configured_key_failure_returns_fallback_after_error(monkeypatch, caplog):
@@ -185,6 +185,29 @@ def test_ai_engine_openai_failure_returns_fallback_after_error(monkeypatch, capl
     assert any("openai" in record.message.lower() and record.levelno >= logging.ERROR for record in caplog.records)
 
 
+def test_ai_engine_mock_success_returns_ai(monkeypatch):
+    from unittest.mock import MagicMock
+    from backend.app.core.ai_engine import analyze_resume_against_job
+
+    monkeypatch.setattr(settings, "AI_PROVIDER_API_KEY", "sk-ant-valid-key")
+    monkeypatch.setattr(settings, "AI_PROVIDER", "anthropic")
+
+    mock_msg = MagicMock()
+    mock_msg.content = [
+        MagicMock(
+            text='{"match_score": 85, "missing_keywords": ["Docker"], "suggestions": "Add Docker", "strengths": ["Python"], "summary": "Great match"}'
+        )
+    ]
+
+    mock_anthropic = MagicMock()
+    mock_anthropic.Anthropic.return_value.messages.create.return_value = mock_msg
+    monkeypatch.setattr("anthropic.Anthropic", mock_anthropic.Anthropic)
+
+    result = analyze_resume_against_job("Python engineer", "Python engineer with Docker")
+    assert result["engine_used"] == "ai"
+    assert result["match_score"] == 85
+
+
 def test_analysis_api_exposes_engine_used(client):
     headers = get_auth_header(client, email="engine_used_test@example.com")
     resume_id = upload_sample_resume(client, headers)
@@ -202,4 +225,4 @@ def test_analysis_api_exposes_engine_used(client):
     assert get_res.status_code == 200
     res_data = get_res.json()["data"]
     assert "engine_used" in res_data
-    assert res_data["engine_used"] in ["ai", "fallback_heuristic", "fallback_after_error"]
+    assert res_data["engine_used"] in ["ai", "fallback_no_key", "fallback_after_error"]
