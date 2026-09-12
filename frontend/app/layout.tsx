@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "AI Resume Matcher — ATS Scoring & Smart Resume Optimization",
@@ -18,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark scroll-smooth">
-      <body className={`${inter.className} min-h-screen antialiased bg-slate-950 text-slate-100 flex flex-col`}>
+      <body className="min-h-screen antialiased bg-slate-950 text-slate-100 flex flex-col font-sans">
         {children}
         <Toaster theme="dark" richColors position="top-right" />
       </body>
