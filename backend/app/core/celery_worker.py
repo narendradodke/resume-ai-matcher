@@ -67,6 +67,7 @@ def process_analysis_task(self, analysis_id: str):
         analysis.match_score = ai_result.get("match_score", 0)
         analysis.missing_keywords = ai_result.get("missing_keywords", [])
         analysis.suggestions = ai_result.get("suggestions", "")
+        analysis.engine_used = ai_result.get("engine_used", "ai")
         analysis.status = "completed"
         db.commit()
         logger.info("Successfully completed analysis id=%s with score=%s", analysis_id, analysis.match_score)

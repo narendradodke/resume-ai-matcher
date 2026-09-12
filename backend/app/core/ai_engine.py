@@ -1,11 +1,9 @@
 import json
 import re
-import logging
 from typing import Dict, Any, List
 from pydantic import BaseModel, Field, field_validator
 from backend.app.config import settings
-
-logger = logging.getLogger(__name__)
+from backend.app.utils.logger import logger
 
 
 class AnalysisAIOutput(BaseModel):
@@ -14,6 +12,7 @@ class AnalysisAIOutput(BaseModel):
     suggestions: str = Field(...)
     strengths: List[str] = Field(default_factory=list)
     summary: str = Field(...)
+    engine_used: str = Field(default="ai")
 
     @field_validator("match_score", mode="before")
     @classmethod
@@ -49,10 +48,12 @@ Return ONLY a valid JSON object matching this schema:
 """
 
 
-def _heuristic_fallback_analysis(resume_text: str, job_description: str) -> Dict[str, Any]:
+def _heuristic_fallback_analysis(
+    resume_text: str, job_description: str, engine_used: str = "fallback_heuristic"
+) -> Dict[str, Any]:
     """
     Intelligent keyword-based analysis used when no external AI API key is configured
-    or during automated testing.
+    or as an emergency fallback if the configured AI provider encounters a fatal error.
     """
     resume_lower = resume_text.lower()
     jd_lower = job_description.lower()
@@ -94,18 +95,20 @@ def _heuristic_fallback_analysis(resume_text: str, job_description: str) -> Dict
         "suggestions": suggestions,
         "strengths": [f"Demonstrated proficiency in {s.title()}" for s in matched_skills[:5]],
         "summary": f"Candidate demonstrates a {score}% alignment with the target role. Highlight key missing skills to maximize ATS ranking.",
+        "engine_used": engine_used,
     }
 
 
 def analyze_resume_against_job(resume_text: str, job_description: str) -> Dict[str, Any]:
     """
     Orchestrate resume analysis using Anthropic Claude, OpenAI, or the fallback engine.
+    Never silently masks AI provider failures when an API key is configured.
     """
     api_key = settings.AI_PROVIDER_API_KEY
 
-    # If no API key configured, use intelligent heuristic engine
+    # If no API key configured (local development/testing), use heuristic engine cleanly
     if not api_key or api_key.startswith("your_") or api_key.strip() == "":
-        return _heuristic_fallback_analysis(resume_text, job_description)
+        return _heuristic_fallback_analysis(resume_text, job_description, engine_used="fallback_heuristic")
 
     prompt_user = f"""<resume_text>
 {resume_text}
@@ -133,11 +136,21 @@ Analyze the match and return valid JSON adhering strictly to the required schema
             json_match = re.search(r"\{[\s\S]*\}", raw_text)
             if json_match:
                 parsed = json.loads(json_match.group(0))
+                parsed["engine_used"] = "ai"
                 validated = AnalysisAIOutput.model_validate(parsed)
                 return validated.model_dump()
+            else:
+                raise ValueError("Anthropic response did not contain a valid JSON object")
         except Exception as e:
-            logger.warning("Anthropic analysis failed, falling back to heuristic engine: %s", e)
-            return _heuristic_fallback_analysis(resume_text, job_description)
+            logger.error(
+                "AI provider 'anthropic' failed with error type %s: %s",
+                type(e).__name__,
+                str(e),
+                exc_info=True,
+            )
+            return _heuristic_fallback_analysis(
+                resume_text, job_description, engine_used="fallback_after_error"
+            )
 
     # 2. OpenAI Provider
     elif settings.AI_PROVIDER.lower() == "openai":
@@ -154,10 +167,21 @@ Analyze the match and return valid JSON adhering strictly to the required schema
             )
             raw_text = response.choices[0].message.content
             parsed = json.loads(raw_text)
+            parsed["engine_used"] = "ai"
             validated = AnalysisAIOutput.model_validate(parsed)
             return validated.model_dump()
         except Exception as e:
-            logger.warning("OpenAI analysis failed, falling back to heuristic engine: %s", e)
-            return _heuristic_fallback_analysis(resume_text, job_description)
+            logger.error(
+                "AI provider 'openai' failed with error type %s: %s",
+                type(e).__name__,
+                str(e),
+                exc_info=True,
+            )
+            return _heuristic_fallback_analysis(
+                resume_text, job_description, engine_used="fallback_after_error"
+            )
 
-    return _heuristic_fallback_analysis(resume_text, job_description)
+    logger.error("Unrecognized AI provider '%s' configured in settings", settings.AI_PROVIDER)
+    return _heuristic_fallback_analysis(
+        resume_text, job_description, engine_used="fallback_after_error"
+    )

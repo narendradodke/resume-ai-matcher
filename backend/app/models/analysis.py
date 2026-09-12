@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 from datetime import datetime, timezone
 from typing import Optional, List
 from sqlalchemy import Integer, Text, String, DateTime, ForeignKey, JSON
@@ -38,6 +38,7 @@ class Analysis(Base):
         default=list,
     )
     suggestions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    engine_used: Mapped[Optional[str]] = mapped_column(String(50), default="ai", nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="completed", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

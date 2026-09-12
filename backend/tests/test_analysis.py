@@ -144,3 +144,62 @@ def test_ai_engine_schema_and_prompt_safety():
     # Validate against AnalysisAIOutput schema directly
     validated = AnalysisAIOutput.model_validate(result)
     assert 0 <= validated.match_score <= 100
+    assert result["engine_used"] == "fallback_heuristic"
+
+
+def test_ai_engine_configured_key_failure_returns_fallback_after_error(monkeypatch, caplog):
+    import logging
+    from backend.app.core.ai_engine import analyze_resume_against_job
+
+    # Configure a dummy API key to simulate an active provider
+    monkeypatch.setattr(settings, "AI_PROVIDER_API_KEY", "sk-ant-test-active-configured-key-12345")
+    monkeypatch.setattr(settings, "AI_PROVIDER", "anthropic")
+
+    # Call analyze - should fail to connect to Anthropic API, log at ERROR level, and return fallback_after_error
+    with caplog.at_level(logging.ERROR):
+        result = analyze_resume_against_job(
+            "Python Engineer with FastAPI experience.",
+            "FastAPI backend engineer needed.",
+        )
+
+    assert result["engine_used"] == "fallback_after_error"
+    assert 0 <= result["match_score"] <= 100
+    # Confirm error was logged with ERROR level and provider name
+    assert any("anthropic" in record.message.lower() and record.levelno >= logging.ERROR for record in caplog.records)
+
+
+def test_ai_engine_openai_failure_returns_fallback_after_error(monkeypatch, caplog):
+    import logging
+    from backend.app.core.ai_engine import analyze_resume_against_job
+
+    monkeypatch.setattr(settings, "AI_PROVIDER_API_KEY", "sk-proj-test-active-key-67890")
+    monkeypatch.setattr(settings, "AI_PROVIDER", "openai")
+
+    with caplog.at_level(logging.ERROR):
+        result = analyze_resume_against_job(
+            "React developer with Next.js",
+            "Next.js frontend engineer needed",
+        )
+
+    assert result["engine_used"] == "fallback_after_error"
+    assert any("openai" in record.message.lower() and record.levelno >= logging.ERROR for record in caplog.records)
+
+
+def test_analysis_api_exposes_engine_used(client):
+    headers = get_auth_header(client, email="engine_used_test@example.com")
+    resume_id = upload_sample_resume(client, headers)
+    jd = "Python Engineer with FastAPI and PostgreSQL background required."
+
+    run_res = client.post(
+        "/api/v1/analysis/run",
+        headers=headers,
+        json={"resume_id": resume_id, "job_description": jd},
+    )
+    assert run_res.status_code == 202
+    analysis_id = run_res.json()["data"]["id"]
+
+    get_res = client.get(f"/api/v1/analysis/{analysis_id}", headers=headers)
+    assert get_res.status_code == 200
+    res_data = get_res.json()["data"]
+    assert "engine_used" in res_data
+    assert res_data["engine_used"] in ["ai", "fallback_heuristic", "fallback_after_error"]

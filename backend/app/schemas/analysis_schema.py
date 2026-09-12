@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
@@ -17,6 +17,7 @@ class AnalysisResponse(BaseModel):
     match_score: Optional[int] = None
     missing_keywords: Optional[List[str]] = None
     suggestions: Optional[str] = None
+    engine_used: Optional[str] = None
     status: str
     created_at: datetime
 
@@ -27,6 +28,7 @@ class AnalysisHistoryItem(BaseModel):
     id: UUID
     resume_id: UUID
     match_score: Optional[int] = None
+    engine_used: Optional[str] = None
     status: str
     created_at: datetime
     job_title_snippet: str
