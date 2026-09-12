@@ -370,23 +370,26 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
 All test suites and static analysis tools have been executed and verified locally:
 
 ### Backend Testing (pytest)
-- **Status:** **36 passed, 0 failed, 0 skipped** (100% pass rate)
+- **Status:** **41 passed, 0 failed, 0 skipped** (100% pass rate, snapshot as of September 2026)
 ```bash
-cd backend
-pytest -v
+# Run full suite inside backend environment
+pytest backend/tests/ -v
+# Or inside running backend Docker container:
+docker compose exec backend pytest tests/ -v
 ```
-Test breakdown:
-- Authentication & Sessions: 9 tests (signup, login, token refresh, `GET /me`, validation errors)
-- Google OAuth Token Verification: 4 tests (verified flow, invalid tokens, safe linking, subject mismatch)
-- CORS & Origin Normalization: 6 tests (preflight OPTIONS, disallowed origins, health check origins, comma-separated parsing, JSON list parsing, production wildcard rejection)
-- Resume Upload & Security: 7 tests (valid PDF, non-PDF rejection, list, get, delete, user isolation, magic bytes, path traversal sanitization)
-- AI Analysis & Queue: 5 tests (successful run, 404 validation, history pagination, user isolation, prompt injection & schema safety)
-- User Profile & Security Settings: 5 tests (profile update, cascade delete, password change verification, invalid current password, production JWT secret enforcement)
+Test suite breakdown (41 total tests across 6 test modules):
+- `tests/test_auth.py` (13 tests): Email/password signup, duplicate email rejection, signup validation failure, login success, invalid credentials, token refresh, invalid refresh token, `GET /me` profile, unauthorized access rejection, Google OAuth flow, invalid Google token handling, safe account linking with existing password user, and subject mismatch defense.
+- `tests/test_analysis.py` (9 tests): Successful asynchronous analysis triggering, resume not found 404 handling, analysis history retrieval by ID and user isolation, prompt injection XML fence safety, fallback engine error handling on key failure (Anthropic & OpenAI), AI mock success, and API serialization exposing `engine_used`.
+- `tests/test_resume.py` (7 tests): Valid PDF upload & text extraction, invalid file extension rejection, list and get resumes, resume deletion, user isolation security, invalid magic bytes (`%PDF-`) detection, and path traversal sanitization.
+- `tests/test_cors.py` (6 tests): CORS preflight OPTIONS on allowed origins, disallowed origin rejection, GET request CORS headers on allowed origins, comma-separated origin parsing, JSON list origin parsing, and production wildcard rejection with credentials.
+- `tests/test_user.py` (5 tests): User profile updates, user account deletion cascading to resumes and analyses, password change success verification, invalid current password rejection, and production JWT secret enforcement.
+- `tests/test_rate_limiter.py` (1 test): Rate limiter distributed Redis fallback with explicit log warning.
 
-### Frontend Verification
+### Frontend Unit & Static Analysis
+- **Unit Tests:** Passed (`npm test` — 3/3 tests in `test/api.test.ts` verifying API base URL validation, localhost development defaults, and trailing slash stripping)
 - **ESLint:** Passed (`npm run lint` — 0 warnings, 0 errors)
 - **TypeScript:** Passed (`npx tsc --noEmit` — 0 errors)
-- **Production Build:** Passed (`npm run build` — all 9 static & dynamic pages compiled)
+- **Production Build:** Passed (`npm run build` — Next.js production build compiled)
 
 ### Playwright End-to-End (E2E) Testing
 - **Status:** **26 passed, 0 failed** across Chromium & Mobile Chrome viewports
@@ -414,18 +417,31 @@ Coverage includes:
 
 ## 13. Docker & Deployment Status
 
-### Docker Stack Verification
-- `docker-compose.yml` validated via `docker compose config -q` without warnings or obsolete syntax.
-- All services (`postgres`, `redis`, `backend`, `celery_worker`, `frontend`) configured with environment variable interpolation to prevent hardcoded committed secrets.
-- **Important**: An active `.env` file (copied from `.env.example` and populated with a real, secure `JWT_SECRET_KEY` and database credentials) must be created and populated before running `docker-compose up` or `docker compose up`.
+### Docker Stack Verification (Verified Live)
+The entire multi-container architecture is verified running and tested end-to-end:
+- **`resume_matcher_postgres` (PostgreSQL 16)**: Container starts healthy; automatic Alembic migrations run on backend startup, applying all schema revisions up to `f2e1d0c9b8a7` (including Google OAuth and fallback engine columns).
+- **`resume_matcher_redis` (Redis 7)**: Healthy cache and message broker for Celery and rate limiting.
+- **`resume_matcher_backend` (FastAPI / Python 3.11)**: Starts cleanly on port 8000; verified live via `curl` for `/health`, `/api/v1/auth/signup`, `/api/v1/auth/login`, `/api/v1/user/profile`, `/api/v1/resume/upload`, and `/api/v1/analysis/run`.
+- **`resume_matcher_celery` (Celery Worker)**: Connects to Redis broker, successfully receives and processes `process_analysis_task` asynchronously, persisting completed analysis scores and suggestions to PostgreSQL.
+- **`resume_matcher_frontend` (Next.js 14)**: Builds with build-arg `NEXT_PUBLIC_API_BASE_URL` and serves production traffic on port 3000 (`HTTP 200 OK`).
+
+```bash
+# To spin up the entire stack:
+docker compose up --build -d
+
+# Verify all containers are up and healthy:
+docker compose ps
+
+# Run backend test suite within the container:
+docker compose exec backend pytest tests/ -v
+```
 
 ### Live Deployment Verification
-- **Deployment Status:** Deployment configurations (Render `render.yaml`, Dockerfiles, Next.js production build) are verified and prepared for production. Live deployment verification requires deployment-provider credentials (Vercel/Render/Railway) to be configured in production environments.
+- **Deployment Status:** Deployment configurations (Render `render.yaml`, Dockerfiles, Next.js production build) are verified and prepared for production. Live cloud hosting depends on external deployment provider tokens (Vercel/Render/Railway).
 
-### Known Limitations & Remaining Risks
-- **External AI Provider Availability:** In production, match evaluation requires an active Anthropic or OpenAI API key; if missing, the fallback heuristic engine guarantees continuous operation.
-- **Live Deployment Access:** Live cloud hosting depends on external deployment provider tokens.
-- **Docker Desktop Local Environment:** On Windows environments without active Docker Desktop WSL2 daemon instances, running `docker compose up` requires starting the Docker engine first.
+### Known Limitations & Upstream Dependencies
+- **External AI Provider Availability:** In production, match evaluation requires an active Anthropic or OpenAI API key; if missing or if the API call fails, the fallback heuristic engine safely completes analysis and explicitly tags the record with `engine_used: fallback_no_key` or `fallback_after_error`.
+- **AnyIO Starlette Deprecation Warning:** Starlette 1.6.0's internal `testclient.py` uses `anyio.abc.BlockingPortal` alias rather than `anyio.from_thread.BlockingPortal`. This is an upstream dependency warning that will resolve in future Starlette releases; it is intentionally not globally suppressed.
 
 ---
 
@@ -441,8 +457,10 @@ Coverage includes:
 - [x] User can view analysis history and drill down into reports
 - [x] All pages responsive, animated, dark-themed, and validated for mobile
 - [x] Production Dockerfiles & Compose configurations prepared with safe secret interpolation
-- [x] Backend test suite verified: **36/36 pytest tests passing**
-- [x] Frontend test suite verified: **26/26 Playwright E2E tests passing**
+- [x] Docker stack fully verified live end-to-end (PostgreSQL, Redis, Backend, Celery, Frontend)
+- [x] Backend test suite verified: **41/41 pytest tests passing**
+- [x] Frontend unit tests verified: **3/3 unit tests passing**
+- [x] Frontend E2E test suite verified: **26/26 Playwright E2E tests passing**
 - [x] GitHub Actions CI pipeline configured for automated testing
 - [x] Clean dead-code audit with pyflakes and ESLint passing with zero warnings
 
