@@ -10,12 +10,15 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy backend source
 COPY . .
 
+# Support backend.app imports as well as root app imports
+RUN ln -s /app /backend
+
 # Create uploads directory
 RUN mkdir -p uploads && chmod 777 uploads
 
 EXPOSE 8000
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app:/
 ENV PYTHONUNBUFFERED=1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
