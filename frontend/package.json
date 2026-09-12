@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --experimental-strip-types --test test/api.test.ts",
+    "test": "node -r ./test/register-ts.js --test test/api.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
