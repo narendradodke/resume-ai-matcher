@@ -262,6 +262,7 @@ ai-resume-matcher/
 - All API responses follow a consistent JSON envelope: `{ "success": bool, "data": {...}, "error": null }`
 - Passwords never stored/logged in plaintext.
 - Rate limit `/analysis/run` (e.g. 10 req/min per user) to control AI API cost.
+- **Distributed Rate Limiting Notice**: The in-memory rate-limiting fallback (`_memory_rate_limits`) is process-local and strictly intended for isolated single-process development and testing. It is **not safe for multi-instance deployments, multiple Uvicorn workers, or scaled container replicas**, as each worker process tracks timestamps independently (multiplying the actual allowed rate limit by the worker count). Redis must be configured and running in any production, clustered, or horizontally scaled deployment.
 - AI calls run via **Celery background task**, frontend polls or uses WebSocket for result (don't block HTTP request on slow LLM call).
 - `.env.example` must list every required environment variable, with no real secrets committed.
 - Dockerized: `docker-compose up` should bring up postgres + redis + backend + frontend with one command.
